@@ -191,6 +191,11 @@ class TransMeta(models.base.ModelBase):
             original_attr = all_fields[field]
             for lang in settings.LANGUAGES:
                 lang_code = lang[LANGUAGE_CODE]
+
+                # Skip creating a field for default language because we will use the original field
+                if lang_code == default_language:
+                    continue
+
                 lang_attr = copy.copy(original_attr)
                 lang_attr.original_fieldname = field
                 lang_attr_name = get_real_fieldname(field, lang_code)
@@ -200,12 +205,21 @@ class TransMeta(models.base.ModelBase):
                         lang_attr.null = True
                     if not lang_attr.blank:
                         lang_attr.blank = True
-                if lang_attr.verbose_name and translate_verbose_names:
-                    lang_attr.verbose_name = string_concat(lang_attr.verbose_name, u' (%s)' % lang_code)
+
+                    # Never force unique on localized fields
+                    if hasattr(lang_attr, 'unique'):
+                        lang_attr._unique = False
+
+                # Set verbose names of translated fields
+                if lang_attr.verbose_name and translate_verbose_names and not lang_code == default_language:
+                    lang_attr.verbose_name = string_concat(lang_attr.verbose_name, u' (%s)' % lang[LANGUAGE_NAME])
+
                 attrs[lang_attr_name] = lang_attr
-            if field in attrs:
-                del attrs[field]
-            attrs[field] = property(default_value_getter(field), default_value_setter(field))
+
+            # Preserve original field
+            # if field in attrs:
+            #     del attrs[field]
+            # attrs[field] = property(default_value_getter(field), default_value_setter(field))
 
         default_language_field = None
         if 'Meta' in attrs and hasattr(attrs['Meta'], 'default_language_field'):
